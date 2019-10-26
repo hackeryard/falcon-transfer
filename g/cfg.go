@@ -113,6 +113,11 @@ func ParseConfig(cfg string) {
 		log.Fatalln("parse config file:", cfg, "fail:", err)
 	}
 
+	// 判断pushgateway是否enable
+	if !c.Pushgateway.Enabled {
+		log.Fatalln("pushgateway is not enablad, exit...")
+	}
+
 	// split cluster config
 	c.Judge.ClusterList = formatClusterItems(c.Judge.Cluster)
 	c.Graph.ClusterList = formatClusterItems(c.Graph.Cluster)
