@@ -9,6 +9,10 @@
         "enabled": true,
         "listen": "0.0.0.0:8433"
     },
+    "pushgateway": {
+        "enabled": true,
+        "listen": "10.10.26.22:9091"
+    },
     "socket": {
         "enabled": true,
         "listen": "0.0.0.0:4444",

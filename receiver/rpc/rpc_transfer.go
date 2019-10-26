@@ -2,13 +2,19 @@ package rpc
 
 import (
 	"fmt"
+	"log"
+	"strconv"
+	"strings"
+	"time"
+
 	cmodel "github.com/open-falcon/common/model"
 	cutils "github.com/open-falcon/common/utils"
 	"github.com/open-falcon/transfer/g"
 	"github.com/open-falcon/transfer/proc"
 	"github.com/open-falcon/transfer/sender"
-	"strconv"
-	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/push"
 )
 
 type Transfer int
@@ -39,10 +45,26 @@ func (t *Transfer) Update(args []*cmodel.MetricValue, reply *cmodel.TransferResp
 
 // process new metric values
 func RecvMetricValues(args []*cmodel.MetricValue, reply *cmodel.TransferResponse, from string) error {
+	var ipAddr string // to store endpoint
+	cfg := g.Config()
+	if !cfg.Pushgateway.Enabled {
+		return nil
+	}
+	pushgatewayURL := "http://" + cfg.Pushgateway.Listen
+
 	start := time.Now()
 	reply.Invalid = 0
 
 	items := []*cmodel.MetaData{}
+
+	// update: using global registery
+	pusher := push.New(pushgatewayURL, "vm_monitor")
+
+	// @@debug use:
+	if g.Config().Debug {
+		log.Println("[debug]: len of metrics in one rpc: ", len(args))
+	}
+
 	for _, v := range args {
 		if v == nil {
 			reply.Invalid += 1
@@ -121,6 +143,68 @@ func RecvMetricValues(args []*cmodel.MetricValue, reply *cmodel.TransferResponse
 
 		fv.Value = vv
 		items = append(items, fv)
+
+		// debug fv
+		if g.Config().Debug {
+			log.Println("[debug]: " + fv.String() + "\n")
+		}
+
+		// using go func to push to pushgateway(from cfg.json)
+		// prefix: vm_
+		// strings.Join(strings.Split(msg, "."), "_")
+		// fund bug
+
+		metricName := strings.Join(strings.Split(fv.Metric, "."), "_")
+		metricName = strings.Join(strings.Split(metricName, "-"), "_")
+		metricName = "vm_monitor_" + metricName
+
+		// using endpoint to ipAddr
+		// @@ 优化：string copy using time
+		ipAddr = fv.Endpoint
+		if fv.CounterType == "GAUGE" {
+			if g.Config().Debug {
+				log.Println("[debug]: " + metricName)
+			}
+			metricProme := prometheus.NewGauge(prometheus.GaugeOpts{
+				Name:        metricName,
+				ConstLabels: fv.Tags,
+			})
+			// registry := prometheus.NewRegistry()
+			// registry.MustRegister(metricProme)
+			metricProme.Set(float64(fv.Value))
+			// pusher := push.New("http://10.10.26.24:9091", "vm_monitor")
+
+			// add metrics
+			pusher.Collector(metricProme)
+			// if err := pusher.Push(); err != nil {
+			// 	fmt.Println("Could not push to Pushgateway:", err)
+			// }
+		} else { // counter
+			if g.Config().Debug {
+				log.Println("[debug]: " + metricName)
+			}
+			metricProme := prometheus.NewCounter(prometheus.CounterOpts{
+				Name:        metricName,
+				ConstLabels: fv.Tags,
+			})
+			// registry := prometheus.NewRegistry()
+			// registry.MustRegister(metricProme)
+			metricProme.Add(float64(fv.Value))
+			// pusher := push.New("http://10.10.26.24:9091", "vm_monitor")
+
+			// add metrics
+			pusher.Collector(metricProme)
+			// if err := pusher.Push(); err != nil {
+			// 	fmt.Println("Could not push to Pushgateway:", err)
+			// }
+		}
+	} // end for
+
+	// send total metrics at once
+	// @@change Push() to Add()
+	// async add
+	if err := pusher.Grouping("instance", ipAddr).Add(); err != nil {
+		fmt.Println("Could not push to Pushgateway:", err)
 	}
 
 	// statistics
@@ -131,8 +215,6 @@ func RecvMetricValues(args []*cmodel.MetricValue, reply *cmodel.TransferResponse
 	} else if from == "http" {
 		proc.HttpRecvCnt.IncrBy(cnt)
 	}
-
-	cfg := g.Config()
 
 	if cfg.Graph.Enabled {
 		sender.Push2GraphSendQueue(items)

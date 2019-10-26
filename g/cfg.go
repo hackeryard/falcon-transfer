@@ -2,10 +2,11 @@ package g
 
 import (
 	"encoding/json"
-	"github.com/toolkits/file"
 	"log"
 	"strings"
 	"sync"
+
+	"github.com/toolkits/file"
 )
 
 type HttpConfig struct {
@@ -14,6 +15,11 @@ type HttpConfig struct {
 }
 
 type RpcConfig struct {
+	Enabled bool   `json:"enabled"`
+	Listen  string `json:"listen"`
+}
+
+type PushgatewayConfig struct {
 	Enabled bool   `json:"enabled"`
 	Listen  string `json:"listen"`
 }
@@ -62,14 +68,15 @@ type TsdbConfig struct {
 }
 
 type GlobalConfig struct {
-	Debug   bool          `json:"debug"`
-	MinStep int           `json:"minStep"` //最小周期,单位sec
-	Http    *HttpConfig   `json:"http"`
-	Rpc     *RpcConfig    `json:"rpc"`
-	Socket  *SocketConfig `json:"socket"`
-	Judge   *JudgeConfig  `json:"judge"`
-	Graph   *GraphConfig  `json:"graph"`
-	Tsdb    *TsdbConfig   `json:"tsdb"`
+	Debug       bool               `json:"debug"`
+	MinStep     int                `json:"minStep"` //最小周期,单位sec
+	Http        *HttpConfig        `json:"http"`
+	Rpc         *RpcConfig         `json:"rpc"`
+	Pushgateway *PushgatewayConfig `json:"pushgateway"`
+	Socket      *SocketConfig      `json:"socket"`
+	Judge       *JudgeConfig       `json:"judge"`
+	Graph       *GraphConfig       `json:"graph"`
+	Tsdb        *TsdbConfig        `json:"tsdb"`
 }
 
 var (
